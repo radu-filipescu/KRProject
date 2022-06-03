@@ -1,5 +1,6 @@
 ### Filipescu Radu - 251
 ### Micul Vrajitor
+import itertools
 
 import numpy as np
 from queue import PriorityQueue, Queue
@@ -15,7 +16,7 @@ TIMEOUT_TIME = 4000
 ## TO DO - input parameters from console
 
 def defFactory():
-    return 0
+    return -1
 color_cost_map = defaultdict(defFactory)
 
 input_file = open(INPUT_FILEPATH, "rt", encoding="utf-8")
@@ -67,41 +68,54 @@ for i in range(len(boots_matrix)):
         if boots_matrix[i][j] == '@':
             STONE_POSITION = (i, j)
 
+def bootSetsAreEqual(boots1, boots2):
+    if len(boots1) == 0 and len(boots2) == 0:
+        return True
+
+    if len(boots1) != len(boots2):
+        return False
+
+    if len(boots1) == 1:
+        return boots1[0] == boots2[0]
+
+    return (boots1[0] == boots2[0] and boots1[1] == boots2[1]) \
+        or (boots1[0] == boots2[1] and boots1[1] == boots2[0])
+
 # defining a state of the game with default values
 class State:
-    def __init__(self):
-        self.gotStone = False
-        self.position = (-1, -1)
-        # boot type will be a list of tuples (boot-color, moves-done)
-        # and always first ones will be the one currently equipped
-        self.cost = 0
-        self.boots = []
-        self.parent = None
-
-    def __init__(self, gotStone, position, cost, parent):
+    def __init__(self, gotStone, position, boots):
         self.gotStone = gotStone
         self.position = position
-        self.cost = cost
-        self.boots = []
-        self.parent = parent
+        self.boots = boots
+
+        # auto-increment state Id ( label )
+        self.id = 0
+        if (self in state_id_map):
+            self.id = state_id_map[self]
+        else:
+            self.id = len(state_id_map) + 1
+            state_id_map[self] = self.id
 
     def __repr__(self):
-        temp = ""
+        temp = "";
         for boot in self.boots:
             temp += str(boot[0]) + ", " + str(boot[1]) + " | "
 
-        return "\nposition is " + str(self.position[0]) + ", " + str(self.position[1]) + "\nstone: " + str(self.gotStone) + \
-                "\ncost is: " + str(self.cost) + "\nboots are: " + temp + "\n"
+        return "\nId is " + str(self.id) + "\nposition is " + str(self.position[0]) + ", " + str(self.position[1]) + "\nstone: " + str(self.gotStone) + \
+                "\nboots are: " + temp + "\n"
 
     def __lt__(self, other):
-        return self.cost < other.cost or (self.cost == other.cost and len(self.boots) > len(other.boots))
+        return self.gotStone > other.gotStone or (self.gotStone == other.gotStone and len(self.boots) > len(other.boots))
 
     def __hash__(self):
-        return hash((self.position, self.boots, self.cost, self.gotStone))
+        return hash((self.position, str(self.boots), self.gotStone))
 
     def __eq__(self, other):
-        return self.cost == other.cost and self.gotStone == other.gotStone \
-            and self.position == other.position and self.boots == other.boots
+        if other is None: return False
+        return self.gotStone == other.gotStone and self.position[0] == other.position[0] \
+               and self.position[1] == other.position[1] and bootSetsAreEqual(self.boots, other.boots)
+
+state_id_map = defaultdict(defFactory)
 
 def bootsAreOkay(boots, L, C):
     if len(boots) == 0:
@@ -114,6 +128,7 @@ def bootsAreOkay(boots, L, C):
     return (boots[0][0] == color_matrix[L][C] and boots[0][1] < 3) or \
            (boots[1][0] == color_matrix[L][C] and boots[1][1] < 3)
 
+# return list of (adjacent_state, cost) tuples
 def getPossibleMoves(currentState):
     l = currentState.position[0]
     c = currentState.position[1]
@@ -129,52 +144,52 @@ def getPossibleMoves(currentState):
         if L >= 0 and L < len(boots_matrix) and C >= 0 and C < len(boots_matrix[0]):
             ## these will be (kinda) common for all adjacent states
             stoneStatus = bool(boots_matrix[L][C] == '@' or currentState.gotStone)
-            futureCost = currentState.cost + color_cost_map[color_matrix[L][C]]
+            futureCost = color_cost_map[color_matrix[L][C]]
 
             # step onto next state, using currently equipped boots
             if currentState.boots[0][0] == color_matrix[L][C] and currentState.boots[0][1] < 3:
-                nextState = State(stoneStatus, (L, C), futureCost, currentState)
-
-                nextState.boots.append((currentState.boots[0][0], currentState.boots[0][1] + 1))
+                nextBoots = [(currentState.boots[0][0], currentState.boots[0][1] + 1)]
                 if len(currentState.boots) == 2 and currentState.boots[1][1] < 3:
-                    nextState.boots.append((currentState.boots[1][0], currentState.boots[1][1]))
+                    nextBoots.append((currentState.boots[1][0], currentState.boots[1][1]))
 
-                possibleStates.append(nextState)
+                nextState = State(stoneStatus, (L, C), nextBoots)
+
+                possibleStates.append((nextState, futureCost))
 
             # or step onto next state after swapping equipped boots with boots in the inventory
             if len(currentState.boots) == 2 and currentState.boots[1][0] == color_matrix[L][C] \
                 and currentState.boots[1][1] < 3:
-                # swapping boots adds 1 cost
-                nextState = State(stoneStatus, (L, C), futureCost + 1, currentState)
 
-                nextState.boots.append((currentState.boots[1][0], currentState.boots[1][1] + 1))
+                nextBoots = [(currentState.boots[1][0], currentState.boots[1][1] + 1)]
                 # if old equipped boots aren't too used
                 if currentState.boots[0][1] < 3:
-                    nextState.boots.append((currentState.boots[0][0], currentState.boots[0][1]))
+                    nextBoots.append((currentState.boots[0][0], currentState.boots[0][1]))
 
-                possibleStates.append(nextState)
+                nextState = State(stoneStatus, (L, C), nextBoots)
+
+                possibleStates.append((nextState, futureCost + 1))
 
             # if we have boots on the position we are at
             if boots_matrix[l][c] not in ['0', '*', '@']:
 
                 # swap them with ones in the inventory
                 if currentState.boots[0][0] == color_matrix[L][C] and currentState.boots[0][1] < 3:
-                    nextState = State(stoneStatus, (L, C), futureCost, currentState)
+                    nextBoots = [(currentState.boots[0][0], currentState.boots[0][1] + 1)]
+                    nextBoots.append((boots_matrix[l][c], 0))
 
-                    nextState.boots.append((currentState.boots[0][0], currentState.boots[0][1] + 1))
-                    nextState.boots.append((boots_matrix[l][c], 0))
+                    nextState = State(stoneStatus, (L, C), nextBoots)
 
-                    possibleStates.append(nextState)
+                    possibleStates.append((nextState, futureCost))
 
                 # swap them with current ones
                 if boots_matrix[l][c] == color_matrix[L][C]:
-                    nextState = State(stoneStatus, (L, C), futureCost + 1, currentState)
-
-                    nextState.boots.append((boots_matrix[l][c], 1))
+                    nextBoots = [(boots_matrix[l][c], 1)]
                     if len(currentState.boots) == 2 and currentState.boots[1][1] < 3:
-                        nextState.boots.append((currentState.boots[1][0], currentState.boots[1][1]))
+                        nextBoots.append((currentState.boots[1][0], currentState.boots[1][1]))
 
-                    possibleStates.append(nextState)
+                    nextState = State(stoneStatus, (L, C), nextBoots)
+
+                    possibleStates.append((nextState, futureCost + 1))
 
     return possibleStates
 
@@ -182,21 +197,28 @@ def isFinalState(currentState):
     return currentState.gotStone and currentState.position == START_POSITION
 
 def getHistory(currentState):
+    global parent
+    global dist
+
     stateHistory = []
     iteratorState = currentState
     while iteratorState != None:
         stateHistory.append(iteratorState)
-        iteratorState = iteratorState.parent
+        iteratorState = parent[iteratorState.id]
 
     stateHistory.reverse()
     return stateHistory
 
 #### NOW GRAPH TRAVERSALS BEGIN
 
-startingState = State(0, START_POSITION, 0, None)
-startingState.boots.append((color_matrix[START_POSITION[0]][START_POSITION[1]], 1))
-solutionsFound = 0
+startingState = State(0, START_POSITION, [(color_matrix[START_POSITION[0]][START_POSITION[1]], 1)])
 
+dist = defaultdict(defFactory)
+parent = defaultdict(defFactory)
+dist[1] = 0
+parent[1] = None
+
+solutionsFound = 0
 
 # 1. depth-first search
 def DFS(currentState):
@@ -210,8 +232,10 @@ def DFS(currentState):
         print(getHistory(currentState))
         solutionsFound += 1
 
-    for state in adjacentStates:
-        DFS(state)
+    for stateCost in adjacentStates:
+        dist[stateCost[0]] = dist[currentState] + stateCost[1]
+        parent[stateCost[0]] = currentState
+        DFS(stateCost[0])
 
 #DFS(startingState)
 
@@ -226,15 +250,19 @@ def DFS(currentState):
 pq = PriorityQueue()
 
 done = False
+pq.put((0, startingState))
 
-pq.put((startingState.cost, startingState))
+mzgmea = 0
 
 while not done and pq.qsize() > 0:
-    currentState = pq.get()[1]
+    stateCost = pq.get()
+    currentCost = stateCost[0]
+    currentState = stateCost[1]
+
+    mzgmea += 1
 
     if isFinalState(currentState):
         print(getHistory(currentState))
-
         solutionsFound += 1
         if solutionsFound == NSOL:
             done = True
@@ -242,6 +270,16 @@ while not done and pq.qsize() > 0:
 
     adjacentStates = getPossibleMoves(currentState)
 
-    for state in adjacentStates:
-        pq.put((state.cost, state))
+    for adjacentStateCost in adjacentStates:
+        adj = adjacentStateCost[0].id
+        cost = adjacentStateCost[1]
 
+        # if adjacent state was not discovered yet
+        # or we improved the cost to it (relaxed some edges)
+        # we update the cost of it and put it into pq
+        if (adj not in dist) or ((adj in dist) and dist[adj] > currentCost + cost):
+            dist[adj] = currentCost + cost
+            parent[adj] = currentState
+            pq.put((currentCost + cost, adjacentStateCost[0]))
+
+#print(dist)
