@@ -1,6 +1,8 @@
 ### Filipescu Radu - 251
 ### Micul Vrajitor
 import itertools
+from datetime import datetime
+from time import sleep
 
 import numpy as np
 from queue import PriorityQueue, Queue
@@ -10,8 +12,8 @@ from collections import defaultdict
 
 INPUT_FILEPATH = "input.txt"
 OUTPUT_FILEPATH = "output.txt"
-NSOL = 3
-TIMEOUT_TIME = 4000
+NSOL = 2
+TIMEOUT_MSEC = 8000
 
 ## TO DO - input parameters from console
 
@@ -209,6 +211,14 @@ def getHistory(currentState):
     stateHistory.reverse()
     return stateHistory
 
+def writeHistoryToFile(filepath, history, time):
+    output_file = open(filepath, "wt")
+    dfs_output.write("\nSolution number " + str(solutionsFound) + ":\n")
+    history = getHistory(currentState)
+    for state in history:
+        dfs_output.write(str(state))
+
+
 #### NOW GRAPH TRAVERSALS BEGIN
 
 startingState = State(0, START_POSITION, [(color_matrix[START_POSITION[0]][START_POSITION[1]], 1)])
@@ -219,26 +229,39 @@ dist[1] = 0
 parent[1] = None
 
 solutionsFound = 0
+TIMESTAMP_START = dt = datetime.timestamp(datetime.now())
 
 # 1. depth-first search
+
+dfs_output = open("output/dfs_output.txt", "wt")
+done = False
+
 def DFS(currentState):
     global solutionsFound
     if solutionsFound == NSOL:
         return
 
+    #print(currentState)
+
     adjacentStates = getPossibleMoves(currentState)
 
+    # TIMESTAMP_NOW = datetime.timestamp(datetime.now())
+    # if TIMESTAMP_NOW - TIMESTAMP_START > TIMEOUT_MSEC:
+    #     done = True
+
     if isFinalState(currentState):
-        print(getHistory(currentState))
         solutionsFound += 1
+        writeHistoryToFile()
 
     for stateCost in adjacentStates:
-        dist[stateCost[0]] = dist[currentState] + stateCost[1]
-        parent[stateCost[0]] = currentState
-        DFS(stateCost[0])
+        if (not stateCost[0].id in dist):
+            dist[stateCost[0].id] = dist[currentState.id] + stateCost[1]
+            parent[stateCost[0].id] = currentState
+            DFS(stateCost[0])
 
-#DFS(startingState)
+DFS(startingState)
 
+dfs_output.close()
 
 # 2. Breadth-first search / Dijkstra
 # because BFS can be seen as Dijkstra with a queue instead of a priority queue (heap)
