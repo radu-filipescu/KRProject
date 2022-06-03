@@ -194,6 +194,7 @@ while not done and pq.qsize() > 0:
             iteratorState = iteratorState.parent
 
         stateHistory.reverse()
+
         print(stateHistory)
 
         solutionsFound += 1
