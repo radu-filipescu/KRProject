@@ -2,7 +2,7 @@
 ### Micul Vrajitor
 
 import numpy as np
-from queue import PriorityQueue
+from queue import PriorityQueue, Queue
 
 ### reading input data
 from collections import defaultdict
@@ -96,6 +96,13 @@ class State:
     def __lt__(self, other):
         return self.cost < other.cost or (self.cost == other.cost and len(self.boots) > len(other.boots))
 
+    def __hash__(self):
+        return hash((self.position, self.boots, self.cost, self.gotStone))
+
+    def __eq__(self, other):
+        return self.cost == other.cost and self.gotStone == other.gotStone \
+            and self.position == other.position and self.boots == other.boots
+
 def bootsAreOkay(boots, L, C):
     if len(boots) == 0:
         return False
@@ -174,12 +181,51 @@ def getPossibleMoves(currentState):
 def isFinalState(currentState):
     return currentState.gotStone and currentState.position == START_POSITION
 
-done = False
-pq = PriorityQueue()
-solutionsFound = 0
+def getHistory(currentState):
+    stateHistory = []
+    iteratorState = currentState
+    while iteratorState != None:
+        stateHistory.append(iteratorState)
+        iteratorState = iteratorState.parent
+
+    stateHistory.reverse()
+    return stateHistory
+
+#### NOW GRAPH TRAVERSALS BEGIN
 
 startingState = State(0, START_POSITION, 0, None)
 startingState.boots.append((color_matrix[START_POSITION[0]][START_POSITION[1]], 1))
+solutionsFound = 0
+
+
+# 1. depth-first search
+def DFS(currentState):
+    global solutionsFound
+    if solutionsFound == NSOL:
+        return
+
+    adjacentStates = getPossibleMoves(currentState)
+
+    if isFinalState(currentState):
+        print(getHistory(currentState))
+        solutionsFound += 1
+
+    for state in adjacentStates:
+        DFS(state)
+
+#DFS(startingState)
+
+
+# 2. Breadth-first search / Dijkstra
+# because BFS can be seen as Dijkstra with a queue instead of a priority queue (heap)
+# we can switch between BFS and Dijkstra just by redefining "pq"
+
+# BFS
+#pq = Queue()
+# Dijkstra
+pq = PriorityQueue()
+
+done = False
 
 pq.put((startingState.cost, startingState))
 
@@ -187,15 +233,7 @@ while not done and pq.qsize() > 0:
     currentState = pq.get()[1]
 
     if isFinalState(currentState):
-        stateHistory = []
-        iteratorState = currentState
-        while iteratorState != None:
-            stateHistory.append(iteratorState)
-            iteratorState = iteratorState.parent
-
-        stateHistory.reverse()
-
-        print(stateHistory)
+        print(getHistory(currentState))
 
         solutionsFound += 1
         if solutionsFound == NSOL:
