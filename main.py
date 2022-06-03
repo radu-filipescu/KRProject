@@ -76,13 +76,14 @@ class State:
         # and always first ones will be the one currently equipped
         self.cost = 0
         self.boots = []
+        self.parent = None
 
-
-    def __init__(self, gotStone, position, cost):
+    def __init__(self, gotStone, position, cost, parent):
         self.gotStone = gotStone
         self.position = position
         self.cost = cost
         self.boots = []
+        self.parent = parent
 
     def __repr__(self):
         temp = ""
@@ -92,6 +93,8 @@ class State:
         return "\nposition is " + str(self.position[0]) + ", " + str(self.position[1]) + "\nstone: " + str(self.gotStone) + \
                 "\ncost is: " + str(self.cost) + "\nboots are: " + temp + "\n"
 
+    def __lt__(self, other):
+        return self.cost < other.cost or (self.cost == other.cost and len(self.boots) > len(other.boots))
 
 def bootsAreOkay(boots, L, C):
     if len(boots) == 0:
@@ -103,8 +106,6 @@ def bootsAreOkay(boots, L, C):
     # else means that len(boots) == 2
     return (boots[0][0] == color_matrix[L][C] and boots[0][1] < 3) or \
            (boots[1][0] == color_matrix[L][C] and boots[1][1] < 3)
-
-
 
 def getPossibleMoves(currentState):
     l = currentState.position[0]
@@ -120,16 +121,16 @@ def getPossibleMoves(currentState):
         # if valid position
         if L >= 0 and L < len(boots_matrix) and C >= 0 and C < len(boots_matrix[0]):
             ## these will be (kinda) common for all adjacent states
-            stoneStatus = (boots_matrix[L][C] == '@' or currentState.gotStone)
+            stoneStatus = bool(boots_matrix[L][C] == '@' or currentState.gotStone)
             futureCost = currentState.cost + color_cost_map[color_matrix[L][C]]
 
             # step onto next state, using currently equipped boots
             if currentState.boots[0][0] == color_matrix[L][C] and currentState.boots[0][1] < 3:
-                nextState = State(stoneStatus, (L, C), futureCost)
+                nextState = State(stoneStatus, (L, C), futureCost, currentState)
 
                 nextState.boots.append((currentState.boots[0][0], currentState.boots[0][1] + 1))
                 if len(currentState.boots) == 2 and currentState.boots[1][1] < 3:
-                    nextState.boots.append(currentState.boots[1][0], currentState.boots[1][1])
+                    nextState.boots.append((currentState.boots[1][0], currentState.boots[1][1]))
 
                 possibleStates.append(nextState)
 
@@ -137,12 +138,12 @@ def getPossibleMoves(currentState):
             if len(currentState.boots) == 2 and currentState.boots[1][0] == color_matrix[L][C] \
                 and currentState.boots[1][1] < 3:
                 # swapping boots adds 1 cost
-                nextState = State(stoneStatus, (L, C), futureCost + 1)
+                nextState = State(stoneStatus, (L, C), futureCost + 1, currentState)
 
                 nextState.boots.append((currentState.boots[1][0], currentState.boots[1][1] + 1))
                 # if old equipped boots aren't too used
                 if currentState.boots[0][1] < 3:
-                    nextState.boots.append(currentState.boots[0][0], currentState.boots[0][1])
+                    nextState.boots.append((currentState.boots[0][0], currentState.boots[0][1]))
 
                 possibleStates.append(nextState)
 
@@ -151,7 +152,7 @@ def getPossibleMoves(currentState):
 
                 # swap them with ones in the inventory
                 if currentState.boots[0][0] == color_matrix[L][C] and currentState.boots[0][1] < 3:
-                    nextState = State(stoneStatus, (L, C), futureCost)
+                    nextState = State(stoneStatus, (L, C), futureCost, currentState)
 
                     nextState.boots.append((currentState.boots[0][0], currentState.boots[0][1] + 1))
                     nextState.boots.append((boots_matrix[l][c], 0))
@@ -160,30 +161,48 @@ def getPossibleMoves(currentState):
 
                 # swap them with current ones
                 if boots_matrix[l][c] == color_matrix[L][C]:
-                    nextState = State(stoneStatus, (L, C), futureCost + 1)
+                    nextState = State(stoneStatus, (L, C), futureCost + 1, currentState)
 
                     nextState.boots.append((boots_matrix[l][c], 1))
                     if len(currentState.boots) == 2 and currentState.boots[1][1] < 3:
-                        nextState.boots.append(currentState.boots[1][0], currentState.boots[1][1])
+                        nextState.boots.append((currentState.boots[1][0], currentState.boots[1][1]))
 
                     possibleStates.append(nextState)
 
     return possibleStates
 
+def isFinalState(currentState):
+    return currentState.gotStone and currentState.position == START_POSITION
+
 done = False
 pq = PriorityQueue()
+solutionsFound = 0
 
-startingState = State(0, (0, 3), 0)
-startingState.boots.append(('r', 1))
+startingState = State(0, START_POSITION, 0, None)
+startingState.boots.append((color_matrix[START_POSITION[0]][START_POSITION[1]], 1))
 
-mzgmea = getPossibleMoves(startingState)
+pq.put((startingState.cost, startingState))
 
-print(mzgmea)
-print(getPossibleMoves(mzgmea[0]))
+while not done and pq.qsize() > 0:
+    currentState = pq.get()[1]
 
-# pq.put((0, State()))
+    if isFinalState(currentState):
+        stateHistory = []
+        iteratorState = currentState
+        while iteratorState != None:
+            stateHistory.append(iteratorState)
+            iteratorState = iteratorState.parent
 
-# while not done and pq.qsize() > 0:
-#     currentState = pq.get()
-#
-#     edges = getPossibleMoves(currentState)
+        stateHistory.reverse()
+        print(stateHistory)
+
+        solutionsFound += 1
+        if solutionsFound == NSOL:
+            done = True
+            break
+
+    adjacentStates = getPossibleMoves(currentState)
+
+    for state in adjacentStates:
+        pq.put((state.cost, state))
+
