@@ -10,7 +10,7 @@ from collections import defaultdict
 
 INPUT_FILEPATH = "input.txt"
 OUTPUT_FILEPATH = "output.txt"
-NSOL = 1
+NSOL = 3
 TIMEOUT_TIME = 4000
 
 ## TO DO - input parameters from console
@@ -250,16 +250,12 @@ def DFS(currentState):
 pq = PriorityQueue()
 
 done = False
-pq.put((0, startingState))
-
-mzgmea = 0
+#pq.put((0, startingState))
 
 while not done and pq.qsize() > 0:
     stateCost = pq.get()
     currentCost = stateCost[0]
-    currentState = stateCost[1]
-
-    mzgmea += 1
+    currentState = dist[currentState.id]
 
     if isFinalState(currentState):
         print(getHistory(currentState))
@@ -282,4 +278,55 @@ while not done and pq.qsize() > 0:
             parent[adj] = currentState
             pq.put((currentCost + cost, adjacentStateCost[0]))
 
-#print(dist)
+# 3. A* search
+# will be mostly same as Dijkstra but with a heuristic used
+# to try to find most promising paths first
+
+## 3.1 simple heuristic -> Manhattan distance to stone
+def heuristicDistance1(currentState):
+    return abs(currentState.position[0] - STONE_POSITION[0]) + abs(currentState.position[1] - STONE_POSITION[1])
+
+## 3.2 admissible heuristic 1 -> distance to start + 2 * Manhattan distance to stone IF stone is not taken
+
+def heuristicDistance2(currentState):
+    distance = abs(currentState.position[0] - START_POSITION[0]) + abs(currentState.position[1] - START_POSITION[1])
+    if not currentState.gotStone:
+        distance += 2 * heuristicDistance1(currentState)
+
+    return distance
+
+## 3.3 admissible heuristic 2 -> distance to start + distance to stone
+
+def heuristicDistance3(currentState):
+    return heuristicDistance1(currentState) + \
+           abs(currentState.position[0] - START_POSITION[0]) + abs(currentState.position[1] - START_POSITION[1])
+
+pq = PriorityQueue()
+done = False
+pq.put((0, startingState))
+
+while not done and pq.qsize() > 0:
+    stateCost = pq.get()
+    currentState = stateCost[1]
+    currentCost = dist[currentState.id]
+
+    if isFinalState(currentState):
+        print(getHistory(currentState))
+        solutionsFound += 1
+        if solutionsFound == NSOL:
+            done = True
+            break
+
+    adjacentStates = getPossibleMoves(currentState)
+
+    for adjacentStateCost in adjacentStates:
+        adj = adjacentStateCost[0]
+        cost = adjacentStateCost[1]
+
+        # if adjacent state was not discovered yet
+        # or we improved the cost to it (relaxed some edges)
+        # we update the cost of it and put it into pq
+        if (adj.id not in dist) or ((adj.id in dist) and dist[adj.id] > currentCost + cost):
+            dist[adj.id] = currentCost + cost
+            parent[adj.id] = currentState
+            pq.put((currentCost + cost + heuristicDistance3(adj), adjacentStateCost[0]))
