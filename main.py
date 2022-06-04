@@ -1,21 +1,28 @@
 ### Filipescu Radu - 251
 ### Micul Vrajitor
-import itertools
-from datetime import datetime
-from time import sleep
 
+from datetime import datetime
 import numpy as np
 from queue import PriorityQueue, Queue
-
-### reading input data
 from collections import defaultdict
 
-INPUT_FILEPATH = "input.txt"
-OUTPUT_FILEPATH = "output.txt"
-NSOL = 2
-TIMEOUT_MSEC = 8000
+### reading input data
+DEVELOP_MODE = True
 
-## TO DO - input parameters from console
+if DEVELOP_MODE:
+    INPUT_FILEPATH = "input.txt"
+    OUTPUT_FILEPATH = "output"
+    NSOL = 2
+    TIMEOUT_SEC = 8
+else:
+    print("Please enter input filepath:")
+    INPUT_FILEPATH = input()
+    print("Please enter output path:")
+    OUTPUT_FILEPATH = input()
+    print("Please enter the number of solutions to print:")
+    NSOL = int(input())
+    print("Please enter timeout (seconds):")
+    TIMEOUT_SEC = int(input())
 
 def defFactory():
     return -1
@@ -70,18 +77,7 @@ for i in range(len(boots_matrix)):
         if boots_matrix[i][j] == '@':
             STONE_POSITION = (i, j)
 
-def bootSetsAreEqual(boots1, boots2):
-    if len(boots1) == 0 and len(boots2) == 0:
-        return True
 
-    if len(boots1) != len(boots2):
-        return False
-
-    if len(boots1) == 1:
-        return boots1[0] == boots2[0]
-
-    return (boots1[0] == boots2[0] and boots1[1] == boots2[1]) \
-        or (boots1[0] == boots2[1] and boots1[1] == boots2[0])
 
 # defining a state of the game with default values
 class State:
@@ -118,6 +114,19 @@ class State:
                and self.position[1] == other.position[1] and bootSetsAreEqual(self.boots, other.boots)
 
 state_id_map = defaultdict(defFactory)
+
+def bootSetsAreEqual(boots1, boots2):
+    if len(boots1) == 0 and len(boots2) == 0:
+        return True
+
+    if len(boots1) != len(boots2):
+        return False
+
+    if len(boots1) == 1:
+        return boots1[0] == boots2[0]
+
+    return (boots1[0] == boots2[0] and boots1[1] == boots2[1]) \
+        or (boots1[0] == boots2[1] and boots1[1] == boots2[0])
 
 def bootsAreOkay(boots, L, C):
     if len(boots) == 0:
@@ -211,13 +220,23 @@ def getHistory(currentState):
     stateHistory.reverse()
     return stateHistory
 
-def writeHistoryToFile(filepath, history, time):
-    output_file = open(filepath, "wt")
-    dfs_output.write("\nSolution number " + str(solutionsFound) + ":\n")
-    history = getHistory(currentState)
-    for state in history:
-        dfs_output.write(str(state))
+def writeHistoryToFile(filepath, history, time, cost):
+    global solutionsFound
 
+    if solutionsFound == 1:
+        output_file = open(filepath, "wt")
+    else:
+        output_file = open(filepath, "a")
+
+    output_file.write("###################################\n")
+    output_file.write("Solution number " + str(solutionsFound) + ":\n")
+    output_file.write("length: " + str(len(history)) + " cost: " + str(cost) + "\n")
+    output_file.write("time: " + str(time) + "\n")
+    output_file.write("nodes created: " + str(len(state_id_map)) + "\n")
+    for state in history:
+        output_file.write(str(state))
+
+    output_file.close()
 
 #### NOW GRAPH TRAVERSALS BEGIN
 
@@ -229,29 +248,31 @@ dist[1] = 0
 parent[1] = None
 
 solutionsFound = 0
-TIMESTAMP_START = dt = datetime.timestamp(datetime.now())
+TIMESTAMP_START = int(datetime.timestamp(datetime.now()))
 
 # 1. depth-first search
 
-dfs_output = open("output/dfs_output.txt", "wt")
 done = False
-
 def DFS(currentState):
     global solutionsFound
+    global dist
+    global parent
+    global NSOL
+    global done
+
     if solutionsFound == NSOL:
         return
 
-    #print(currentState)
-
     adjacentStates = getPossibleMoves(currentState)
 
-    # TIMESTAMP_NOW = datetime.timestamp(datetime.now())
-    # if TIMESTAMP_NOW - TIMESTAMP_START > TIMEOUT_MSEC:
-    #     done = True
+    TIMESTAMP_NOW = datetime.timestamp(datetime.now())
+    if TIMESTAMP_NOW - TIMESTAMP_START > TIMEOUT_SEC:
+        done = True
 
     if isFinalState(currentState):
         solutionsFound += 1
-        writeHistoryToFile()
+        writeHistoryToFile(OUTPUT_FILEPATH + "/dfs_output.txt", getHistory(currentState), \
+                round(datetime.timestamp(datetime.now()) - TIMESTAMP_START, 3), dist[currentState.id])
 
     for stateCost in adjacentStates:
         if (not stateCost[0].id in dist):
@@ -259,9 +280,7 @@ def DFS(currentState):
             parent[stateCost[0].id] = currentState
             DFS(stateCost[0])
 
-DFS(startingState)
-
-dfs_output.close()
+#DFS(startingState)
 
 # 2. Breadth-first search / Dijkstra
 # because BFS can be seen as Dijkstra with a queue instead of a priority queue (heap)
@@ -273,19 +292,24 @@ dfs_output.close()
 pq = PriorityQueue()
 
 done = False
-#pq.put((0, startingState))
+pq.put((0, startingState))
 
 while not done and pq.qsize() > 0:
-    stateCost = pq.get()
-    currentCost = stateCost[0]
-    currentState = dist[currentState.id]
+    currentState = pq.get()[1]
+    currentCost = dist[currentState.id]
 
     if isFinalState(currentState):
-        print(getHistory(currentState))
         solutionsFound += 1
+        writeHistoryToFile(OUTPUT_FILEPATH + "/bfs_dijkstra_output.txt", getHistory(currentState), \
+                round(datetime.timestamp(datetime.now()) - TIMESTAMP_START, 3), dist[currentState.id])
         if solutionsFound == NSOL:
             done = True
             break
+
+    TIMESTAMP_NOW = datetime.timestamp(datetime.now())
+    if TIMESTAMP_NOW - TIMESTAMP_START > TIMEOUT_SEC:
+        done = True
+        break
 
     adjacentStates = getPossibleMoves(currentState)
 
@@ -301,32 +325,33 @@ while not done and pq.qsize() > 0:
             parent[adj] = currentState
             pq.put((currentCost + cost, adjacentStateCost[0]))
 
-# 3. A* search
+# 3. A* search (optimised)
 # will be mostly same as Dijkstra but with a heuristic used
 # to try to find most promising paths first
 
-## 3.1 simple heuristic -> Manhattan distance to stone
+## 3.1 simple heuristic -> Manhattan distance to start
 def heuristicDistance1(currentState):
-    return abs(currentState.position[0] - STONE_POSITION[0]) + abs(currentState.position[1] - STONE_POSITION[1])
+    return abs(currentState.position[0] - START_POSITION[0]) + abs(currentState.position[1] - START_POSITION[1])
 
 ## 3.2 admissible heuristic 1 -> distance to start + 2 * Manhattan distance to stone IF stone is not taken
 
 def heuristicDistance2(currentState):
-    distance = abs(currentState.position[0] - START_POSITION[0]) + abs(currentState.position[1] - START_POSITION[1])
+    L = currentState.position[0]
+    C = currentState.position[1]
+    distance = heuristicDistance1(currentState)
     if not currentState.gotStone:
-        distance += 2 * heuristicDistance1(currentState)
+        distance += 2 * (abs(STONE_POSITION[0] - L) + abs(STONE_POSITION[1] - C))
 
     return distance
 
 ## 3.3 admissible heuristic 2 -> distance to start + distance to stone
 
 def heuristicDistance3(currentState):
-    return heuristicDistance1(currentState) + \
-           abs(currentState.position[0] - START_POSITION[0]) + abs(currentState.position[1] - START_POSITION[1])
+    return heuristicDistance1(currentState) - len(currentState.boots)
 
 pq = PriorityQueue()
 done = False
-pq.put((0, startingState))
+#pq.put((0, startingState))
 
 while not done and pq.qsize() > 0:
     stateCost = pq.get()
@@ -334,11 +359,17 @@ while not done and pq.qsize() > 0:
     currentCost = dist[currentState.id]
 
     if isFinalState(currentState):
-        print(getHistory(currentState))
         solutionsFound += 1
+        writeHistoryToFile(OUTPUT_FILEPATH + "/a_star_output.txt", getHistory(currentState), \
+                round(datetime.timestamp(datetime.now()) - TIMESTAMP_START, 3), dist[currentState.id])
         if solutionsFound == NSOL:
             done = True
             break
+
+    TIMESTAMP_NOW = datetime.timestamp(datetime.now())
+    if TIMESTAMP_NOW - TIMESTAMP_START > TIMEOUT_SEC:
+        done = True
+        break
 
     adjacentStates = getPossibleMoves(currentState)
 
@@ -353,3 +384,57 @@ while not done and pq.qsize() > 0:
             dist[adj.id] = currentCost + cost
             parent[adj.id] = currentState
             pq.put((currentCost + cost + heuristicDistance3(adj), adjacentStateCost[0]))
+
+# 4. IDA*
+
+done = False
+threshold = heuristicDistance2(startingState)
+minimum_over_threshold = 200000000000
+
+def IDA(currentState):
+    global solutionsFound
+    global threshold
+    global minimum_over_threshold
+    global dist
+    global parent
+    global NSOL
+    global done
+
+    if solutionsFound == NSOL:
+        return
+
+    adjacentStates = getPossibleMoves(currentState)
+
+    TIMESTAMP_NOW = datetime.timestamp(datetime.now())
+    if TIMESTAMP_NOW - TIMESTAMP_START > TIMEOUT_SEC:
+        done = True
+
+    if isFinalState(currentState):
+        solutionsFound += 1
+        writeHistoryToFile(OUTPUT_FILEPATH + "/ida_star_output.txt", getHistory(currentState), \
+                round(datetime.timestamp(datetime.now()) - TIMESTAMP_START, 3), dist[currentState.id])
+
+    for stateCost in adjacentStates:
+        if (not stateCost[0].id in dist):
+            if dist[currentState.id] + stateCost[1] <= threshold:
+                dist[stateCost[0].id] = dist[currentState.id] + stateCost[1]
+                parent[stateCost[0].id] = currentState
+                IDA(stateCost[0])
+            else:
+                minimum_over_threshold = min(minimum_over_threshold, dist[currentState.id] + stateCost[1])
+
+#while not done:
+    # resetting the search tree
+    dist = defaultdict(defFactory)
+    parent = defaultdict(defFactory)
+    dist[1] = 0
+    parent[1] = None
+    minimum_over_threshold = 200000000000
+
+    IDA(startingState)
+    threshold = minimum_over_threshold
+
+    TIMESTAMP_NOW = datetime.timestamp(datetime.now())
+    if TIMESTAMP_NOW - TIMESTAMP_START > TIMEOUT_SEC:
+        done = True
+
